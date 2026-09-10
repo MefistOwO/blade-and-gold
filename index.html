@@ -5163,6 +5163,7 @@
   // но показов не будет (это ожидаемо на этапе разработки/тестов).
   const ADSGRAM_BLOCK_ID = "47254";
   let adsgramController = null;
+  let adsgramInitError = null;
 
   function loadAdsgramSdk() {
     return new Promise(function (resolve, reject) {
@@ -5179,11 +5180,19 @@
     loadAdsgramSdk()
       .then(function () {
         if (window.Adsgram) {
-          adsgramController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
+          try {
+            adsgramController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
+          } catch (e) {
+            adsgramInitError = "Adsgram.init() failed: " + (e && e.message ? e.message : e);
+            console.error(adsgramInitError);
+          }
+        } else {
+          adsgramInitError = "window.Adsgram is undefined after script load";
         }
       })
       .catch(function (e) {
-        console.error("Adsgram SDK failed to load:", e);
+        adsgramInitError = "Adsgram SDK script failed to load: " + (e && e.message ? e.message : e);
+        console.error(adsgramInitError);
       });
   }
 
@@ -5203,13 +5212,21 @@
           telegramHaptic("success");
           onSuccess();
         })
-        .catch(function () {
+        .catch(function (e) {
           // Игрок закрыл рекламу раньше времени, реклама не загрузилась,
-          // или блок ещё не готов (плейсхолдерный ADSGRAM_BLOCK_ID) —
-          // награду не даём и тихо ничего не делаем, как и должна себя
-          // вести rewarded-реклама при отказе.
+          // или блок ещё не готов — награду не даём. ВРЕМЕННО, пока
+          // отлаживаем реальный показ: покажем причину тостом, чтобы
+          // видеть её на телефоне без консоли разработчика.
+          showToast("Adsgram show() отказ", String(e && e.message ? e.message : e), null, 4000);
         });
       return;
+    }
+    // ВРЕМЕННО для отладки: если мы внутри Telegram, но контроллер так и
+    // не инициализировался — показываем причину тостом перед тем, как
+    // уйти в симуляцию, чтобы не гадать вслепую. Убрать после того, как
+    // реальный показ подтвердится хоть раз.
+    if (IS_TELEGRAM && !adsgramController) {
+      showToast("Adsgram недоступен", adsgramInitError || "adsgramController ещё не готов (инициализация SDK не успела завершиться)", null, 4000);
     }
     showAdSimulationOverlay(onSuccess);
   }
