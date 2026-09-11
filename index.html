@@ -744,7 +744,6 @@
       <div class="ad-sim-progress-wrap">
         <div class="ad-sim-progress-bar" id="ad-sim-progress"></div>
       </div>
-      <p class="prestige-desc" id="ad-sim-debug" style="display: none; color: #e8c168; margin-top: 10px; word-break: break-word;"></p>
     </div>
   </div>
 
@@ -1030,7 +1029,7 @@
     "static.cancelBtn": "Отмена",
     "static.offlineTitle": "Пока тебя не было",
     "static.offlineClaimBtn": "Забрать",
-    "static.offlineClaimAdBtn": "Смотреть рекламу — забрать вдвое больше",
+    "static.offlineClaimAdBtn": "Смотреть рекламу — забрать больше",
     "static.adTitle": "Реклама",
     "static.adDesc": "Идёт показ рекламы...",
     "static.gameHint": "Бей по чудовищу, чтобы наносить урон",
@@ -1100,7 +1099,7 @@
     "static.cancelBtn": "Cancel",
     "static.offlineTitle": "While You Were Away",
     "static.offlineClaimBtn": "Claim",
-    "static.offlineClaimAdBtn": "Watch an ad — claim double",
+    "static.offlineClaimAdBtn": "Watch an ad — claim more",
     "static.adTitle": "Advertisement",
     "static.adDesc": "Ad playing...",
     "static.gameHint": "Hit the monster to deal damage",
@@ -5225,51 +5224,18 @@
   const AD_SIM_DURATION_MS = 3000;
 
   function showRewardedAd(onSuccess) {
-    // Сбрасываем отладочную строку с прошлого показа, чтобы не оставалась
-    // видна по ошибке, если в этот раз всё пройдёт нормально.
-    const debugElReset = document.getElementById("ad-sim-debug");
-    if (debugElReset) {
-      debugElReset.style.display = "none";
-      debugElReset.textContent = "";
-    }
     if (IS_TELEGRAM && adsgramController) {
       adsgramController.show()
         .then(function () {
           telegramHaptic("success");
           onSuccess();
         })
-        .catch(function (e) {
+        .catch(function () {
           // Игрок закрыл рекламу раньше времени, реклама не загрузилась,
-          // или блок ещё не готов — награду не даём. ВРЕМЕННО, пока
-          // отлаживаем реальный показ: покажем причину тостом, чтобы
-          // видеть её на телефоне без консоли разработчика.
-          showToast("Adsgram show() отказ", String(e && e.message ? e.message : e), null, 4000);
+          // или блок ещё не готов — награду не даём и тихо ничего не
+          // делаем, как и должна себя вести rewarded-реклама при отказе.
         });
       return;
-    }
-    // ВРЕМЕННО для отладки: если мы внутри Telegram, но контроллер так и
-    // не инициализировался — показываем причину тостом перед тем, как
-    // уйти в симуляцию, чтобы не гадать вслепую. Убрать после того, как
-    // реальный показ подтвердится хоть раз.
-    const debugEl = document.getElementById("ad-sim-debug");
-    if (IS_TELEGRAM && !adsgramController) {
-      const reason = adsgramInitError || "adsgramController ещё не готов (инициализация SDK не успела завершиться)";
-      showToast("Adsgram недоступен", reason, null, 4000);
-      // Тост почему-то не был виден на реальном устройстве — дублируем
-      // причину прямо в самом экране симуляции, который точно рендерится
-      // (это подтверждено скриншотом). Надёжнее, чем гадать про
-      // z-index/стекинг-контексты в Telegram WebView вслепую.
-      if (debugEl) {
-        debugEl.textContent = "[debug] IS_TELEGRAM=true, adsgramController=null: " + reason;
-        debugEl.style.display = "block";
-      }
-    } else if (!IS_TELEGRAM && debugEl) {
-      // Ещё более базовая проверка: а вдруг мы вообще не распознаём себя
-      // как запущенных внутри Telegram? Тогда ни один из тостов выше не
-      // сработает в принципе — это покажет, что чинить нужно совсем не
-      // Adsgram, а сам детект window.Telegram.WebApp.
-      debugEl.textContent = "[debug] IS_TELEGRAM=false — window.Telegram.WebApp не обнаружен";
-      debugEl.style.display = "block";
     }
     showAdSimulationOverlay(onSuccess);
   }
@@ -5301,6 +5267,11 @@
   // ---------- Offline progress ----------
   const OFFLINE_PROGRESS_MAX_MS = 8 * 60 * 60 * 1000;
   const OFFLINE_PROGRESS_MIN_SECONDS = 60;
+  // Без рекламы отдаём часть накопленного, а не всё — реклама открывает
+  // именно те 100%, что реально накопились за время отсутствия, а не
+  // искусственный бонус сверху. Честнее, чем "вдвое больше": цифра за
+  // рекламу — это ровно то, что игрок заработал, а не выдумка для приманки.
+  const OFFLINE_BASE_CLAIM_RATIO = 0.55;
 
   function computeOfflineProgress(savedAt) {
     const elapsedMs = Math.max(0, Date.now() - (savedAt || Date.now()));
@@ -5335,6 +5306,8 @@
     adBtn.disabled = false;
     screen.style.display = "flex";
 
+    const baseClaimGold = Math.round(offlineGold * OFFLINE_BASE_CLAIM_RATIO);
+
     function finish(amount) {
       addGold(amount);
       screen.style.display = "none";
@@ -5344,12 +5317,12 @@
     }
 
     claimBtn.onclick = function () {
-      finish(offlineGold);
+      finish(baseClaimGold);
     };
     adBtn.onclick = function () {
       adBtn.disabled = true;
       showRewardedAd(function () {
-        finish(offlineGold * 2);
+        finish(offlineGold);
       });
     };
   }
