@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title data-i18n="static.gameTitle">Клинок и злато</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.90.0/phaser.min.js"></script>
+<!-- Официальный SDK Telegram Web Apps — без него window.Telegram.WebApp не
+     существует, даже если страница открыта внутри Telegram. Грузим его
+     безусловно: вне Telegram скрипт либо не найдётся (страница просто не
+     будет ничего от него ждать, IS_TELEGRAM в основном скрипте посчитает
+     window.Telegram отсутствующим), либо, если найдётся, инициализация
+     ниже по коду вся под условием IS_TELEGRAM — вне Telegram она безвредна. -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
     --bg-void: #150f1f;
