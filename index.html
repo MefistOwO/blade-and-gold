@@ -420,6 +420,28 @@
     margin-top: 3px;
   }
 
+  .toast-ad-btn {
+    display: block;
+    margin-top: 8px;
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--gold);
+    color: var(--gold-bright);
+    font-size: 0.78rem;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .toast-ad-btn:active {
+    background: var(--bg-panel);
+  }
+
+  .toast-ad-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
   .title-screen {
     position: fixed;
     inset: 0;
@@ -966,6 +988,10 @@
     "toast.questDone.killsDescPrefix": "Убито ", "toast.questDone.killsDescSuffix": " монстров",
     "toast.questDone.critsDescPrefix": "Нанесено ", "toast.questDone.critsDescSuffix": " критических ударов",
     "toast.questDone.eventsDesc": "Найдено особое событие",
+    "toast.questAdBonus.title": "Хотите ещё?",
+    "toast.questAdBonus.desc": "Посмотрите рекламу и заберите бонус сверху",
+    "toast.questAdBonus.claimedTitle": "Бонус получен",
+    "toast.questAdBonus.claimedDescPrefix": "Дополнительно ",
     "toast.mimicKilled.title": "Мимик повержен", "toast.mimicKilled.descPrefix": "Утешительная добыча: ",
     "toast.rareSpawn.title": "Редкий монстр появился!", "toast.rareSpawn.desc": "10 секунд, чтобы его одолеть",
     "toast.relicFound.title": "Найдена реликвия!",
@@ -1000,6 +1026,10 @@
     "toast.questDone.killsDescPrefix": "Killed ", "toast.questDone.killsDescSuffix": " monsters",
     "toast.questDone.critsDescPrefix": "Landed ", "toast.questDone.critsDescSuffix": " critical hits",
     "toast.questDone.eventsDesc": "Found a special event",
+    "toast.questAdBonus.title": "Want more?",
+    "toast.questAdBonus.desc": "Watch an ad to claim a bonus on top",
+    "toast.questAdBonus.claimedTitle": "Bonus claimed",
+    "toast.questAdBonus.claimedDescPrefix": "Extra ",
     "toast.mimicKilled.title": "Mimic defeated", "toast.mimicKilled.descPrefix": "Consolation loot: ",
     "toast.rareSpawn.title": "Rare monster appeared!", "toast.rareSpawn.desc": "10 seconds to defeat it",
     "toast.relicFound.title": "Relic found!",
@@ -1170,6 +1200,7 @@
     "static.dailyStreakSuffix": " подряд",
     "static.dailyStreakDesc": "Заходи каждый день — награда растёт до 7-го дня, сейчас множитель ×",
     "static.questKillsTitlePrefix": "Убить ",
+    "static.questAdBonusBtnPrefix": "Смотреть рекламу — забрать ещё +",
     "static.questCritsTitlePrefix": "Нанести ",
     "static.questCritsTitleSuffix": " критов",
     "static.questEventsTitle": "Найти особое событие (сундук, жила, дух, алтарь или редкий монстр)",
@@ -1210,6 +1241,7 @@
     "static.dailyStreakSuffix": " in a row",
     "static.dailyStreakDesc": "Log in every day — the reward grows until day 7, current multiplier ×",
     "static.questKillsTitlePrefix": "Kill ",
+    "static.questAdBonusBtnPrefix": "Watch an ad — claim another +",
     "static.questCritsTitlePrefix": "Land ",
     "static.questCritsTitleSuffix": " crits",
     "static.questEventsTitle": "Find a special event (chest, vein, spirit, altar, or rare monster)",
@@ -2208,6 +2240,47 @@
     }, durationMs || 3200);
 
     if (sound) sound();
+  }
+
+  // Как showToast(), но с кликабельной кнопкой внутри — для опциональных
+  // рекламных добавок (не блокирует уже выданную награду, чисто бонус
+  // сверху). Контейнер тостов сам по себе pointer-events:none, поэтому
+  // явно включаем клики только на конкретном тосте.
+  function showAdBonusToast(title, desc, btnLabel, onWatch) {
+    const container = document.getElementById("toast-container");
+    if (!container) return;
+
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.style.pointerEvents = "auto";
+    el.innerHTML =
+      '<div class="toast-title">' + title + "</div>" +
+      '<div class="toast-desc">' + desc + "</div>" +
+      '<button class="toast-ad-btn" type="button">' + btnLabel + "</button>";
+    container.appendChild(el);
+
+    requestAnimationFrame(function () {
+      el.classList.add("show");
+    });
+
+    function dismiss() {
+      el.classList.remove("show");
+      setTimeout(function () { el.remove(); }, 300);
+    }
+
+    // Дольше обычного тоста — реклама требует осознанного клика, а не
+    // просто прочитать текст за 3 секунды.
+    const autoTimer = setTimeout(dismiss, 6000);
+
+    const btn = el.querySelector(".toast-ad-btn");
+    btn.addEventListener("click", function () {
+      clearTimeout(autoTimer);
+      btn.disabled = true;
+      showRewardedAd(function () {
+        onWatch();
+        dismiss();
+      });
+    });
   }
 
   function showEventToast(success, reward) {
@@ -3634,12 +3707,30 @@
     saveGame();
   }
 
+  // Бонус к квестовой награде за рекламу — начисляется ПОВЕРХ уже выданной
+  // базовой награды, не взамен: reward уже добавлен addGold() к этому
+  // моменту, реклама не блокирует и не задерживает получение базовой части.
+  const QUEST_AD_BONUS_MULT = 0.5;
+
   function grantDailyQuestReward(mult, title, desc) {
     const reward = Math.max(1, Math.round(baseGoldForKill(state.monsterLevel) * mult * totalGoldMultiplier()));
     addGold(reward);
     showToast(title, desc + " \u2014 +" + formatNumber(reward) + t("static.goldSuffix"), playAchievementSound);
     updateSidebar();
     saveGame();
+
+    const bonus = Math.max(1, Math.round(reward * QUEST_AD_BONUS_MULT));
+    showAdBonusToast(
+      t("toast.questAdBonus.title"),
+      t("toast.questAdBonus.desc"),
+      t("static.questAdBonusBtnPrefix") + formatNumber(bonus) + t("static.goldSuffix"),
+      function () {
+        addGold(bonus);
+        showToast(t("toast.questAdBonus.claimedTitle"), t("toast.questAdBonus.claimedDescPrefix") + formatNumber(bonus) + t("static.goldSuffix"), playAchievementSound);
+        updateSidebar();
+        saveGame();
+      }
+    );
   }
 
   // Вызывается после каждого события, которое могло продвинуть один из
