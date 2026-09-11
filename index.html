@@ -2544,6 +2544,12 @@
 
   function punchMonster(scene, crit) {
     scene.tweens.killTweensOf(scene.monsterContainer);
+    // killTweensOf() выше может оборвать чужой fade-in твин (alpha: 0→1,
+    // scale: 0.4→1) на середине. Без явного восстановления здесь контейнер
+    // остаётся полупрозрачным/уменьшенным навсегда — yoyo-твин punchMonster
+    // ниже вернёт scale обратно к тому (неверному) значению, с которого он
+    // стартовал, а не к 1, поэтому фиксируем оба свойства перед его запуском.
+    scene.monsterContainer.setAlpha(1).setScale(1);
     scene.tweens.add({
       targets: scene.monsterContainer,
       scaleX: crit ? 0.8 : 0.9,
@@ -2950,6 +2956,7 @@
 
     scene.monsterContainer.setAlpha(0).setScale(0.4).setPosition(200, 196);
     scene.drawChest();
+    scene.tweens.killTweensOf(scene.monsterContainer);
     scene.tweens.add({
       targets: scene.monsterContainer,
       alpha: 1,
@@ -3087,6 +3094,7 @@
 
     scene.monsterContainer.setAlpha(0).setScale(0.4).setPosition(200, 196);
     scene.drawGoldVein(state.veinNuggetsVisible);
+    scene.tweens.killTweensOf(scene.monsterContainer);
     scene.tweens.add({
       targets: scene.monsterContainer,
       alpha: 1,
@@ -3237,6 +3245,7 @@
 
     scene.monsterContainer.setPosition(x, y);
     scene.drawFlutterSpirit();
+    scene.tweens.killTweensOf(scene.monsterContainer);
 
     if (isFirst) {
       scene.monsterContainer.setAlpha(0).setScale(0.5);
@@ -3419,6 +3428,7 @@
 
     scene.monsterContainer.setAlpha(0).setScale(0.4).setPosition(200, 196);
     scene.drawAltar();
+    scene.tweens.killTweensOf(scene.monsterContainer);
     scene.tweens.add({
       targets: scene.monsterContainer,
       alpha: 1,
@@ -3710,6 +3720,7 @@
     scene.monsterContainer.setAlpha(0).setScale(0.4).setPosition(200, 196);
     scene.drawEventMonster();
 
+    scene.tweens.killTweensOf(scene.monsterContainer);
     scene.tweens.add({
       targets: scene.monsterContainer,
       alpha: 1,
@@ -4724,7 +4735,7 @@
       g.fillPoints(rockPts, true);
       g.strokePoints(rockPts, true);
 
-      const visibleCount = nuggetsVisible === undefined ? GOLD_VEIN_NUGGETS.length : nuggetsVisible;
+      const visibleCount = nuggetsVisible === undefined ? GOLD_VEIN_NUGGETS.length : Math.min(nuggetsVisible, GOLD_VEIN_NUGGETS.length);
       for (let i = 0; i < visibleCount; i++) {
         const n = GOLD_VEIN_NUGGETS[i];
         g.lineStyle(2, 0x8a6a24, 1);
